@@ -1,0 +1,46 @@
+name: Unzip project
+
+# Put a .zip file in the root of the repo (e.g. payment-admin-panel.zip).
+# This workflow extracts it into the repo, deletes the zip, and commits the result.
+on:
+  push:
+    paths:
+      - '*.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  unzip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract zip files from repo root
+        run: |
+          shopt -s nullglob
+          zips=(*.zip)
+          if [ ${#zips[@]} -eq 0 ]; then echo "No zip file found - nothing to do."; exit 0; fi
+          for z in "${zips[@]}"; do
+            echo "Extracting $z"
+            rm -rf /tmp/x && mkdir /tmp/x
+            unzip -q "$z" -d /tmp/x
+            src=/tmp/x
+            # if the zip contains one single top-level folder, use its contents
+            if [ "$(find /tmp/x -mindepth 1 -maxdepth 1 | wc -l)" -eq 1 ] && [ -d "$(find /tmp/x -mindepth 1 -maxdepth 1)" ]; then
+              src="$(find /tmp/x -mindepth 1 -maxdepth 1)"
+            fi
+            rm -rf "$src/.git" "$src/.github" "$src/__MACOSX"
+            cp -a "$src"/. .
+            git rm -q -f "$z"
+          done
+
+      - name: Commit extracted files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "No changes."; exit 0; fi
+          git commit -m "Unzip project files"
+          git push
